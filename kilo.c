@@ -220,7 +220,6 @@ int getWindowSize(int *rows, int *cols) {
     struct winsize ws;
      if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
         if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
-            editorReadKey();
         return getCursorPosition(rows, cols);
     } else {
         *cols = ws.ws_col;
@@ -288,6 +287,28 @@ void editorUpdateSyntax(erow *row) {
             }
         }
 
+        if (E.syntax->flags & HL_HIGHLIGHT_STRINGS) {
+            if (in_string) {
+                row->hl[i] = HL_STRING;
+                if (c == '\\' && i + 1 < row->rsize) {
+                    row->hl[i + 1] = HL_STRING;
+                    i += 2;
+                    continue;
+                }
+                if (c == in_string) in_string = 0;
+                i++;
+                prev_sep = 1;
+                continue;
+            } else {
+                if (c == '"' || c == '\'') {
+                    in_string = c;
+                    row->hl[i] = HL_STRING;
+                    i++;
+                    continue;
+                }
+            }
+        }
+
         if (E.syntax->flags & HL_HIGHLIGHT_NUMBERS) {
             if ((isdigit(c) && (prev_sep || prev_hl == HL_NUMBER)) ||
                     (c == '.' && prev_hl == HL_NUMBER)) {
@@ -318,7 +339,7 @@ void editorUpdateSyntax(erow *row) {
         }
 
         prev_sep = is_separator(c);
-        i++
+        i++;
     }
     int changed = (row->hl_open_comment != in_comment);
     row->hl_open_comment = in_comment;
@@ -547,7 +568,6 @@ void editorOpen(char *filename) {
         char *line = NULL;
         size_t linecap = 0;
         ssize_t linelen;
-        linelen = getline(&line, &linecap, fp);
         while ((linelen = getline(&line, &linecap, fp)) != -1) {
             while (linelen > 0 && (line[linelen - 1] == '\n' ||
                                     line[linelen - 1] == '\r'))
@@ -810,8 +830,8 @@ void editorRefreshScreen() {
     char buf[32];
     snprintf(buf, sizeof(buf), "\x1b[%d;%dH", (E.cy - E.rowoff) + 1,
                                             (E.rx - E.coloff) + 1);
+    abAppend(&ab, buf, strlen(buf));
     
-    abAppend(&ab, "\x1b[H", 3);
     abAppend(&ab, "\x1b[?25h", 6);
     write(STDOUT_FILENO, ab.b, ab.len);
     abFree(&ab);
@@ -899,7 +919,6 @@ void editorMoveCursor(int key) {
     if (E.cx > rowlen) {
             E.cx = rowlen;
     }
-
 }
 
 void editorProcessKeypress() {
